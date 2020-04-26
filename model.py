@@ -13,7 +13,9 @@ class DiffEval(nn.Module):
         self.lm = DistilBertModel.from_pretrained('distilbert-base-cased')
         self.img_embedder = ImageEmbedding()
         self.mlp = nn.Sequential(
-            nn.Linear(512*2+768, self.h_dim),
+            nn.Linear(512*2+768, 4*self.h_dim),
+            nn.ReLU(),
+            nn.Linear(4*self.h_dim, self.h_dim),
             nn.ReLU(),
             nn.Linear(self.h_dim, 2),
             nn.Softmax()
