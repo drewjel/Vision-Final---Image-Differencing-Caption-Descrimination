@@ -5,27 +5,27 @@ from transformers import DistilBertModel
 
 from img_embedding import ImageEmbedding
 
+
 class DiffEval(nn.Module):
     def __init__(self):
         super(DiffEval, self).__init__()
         self.h_dim = 256
         self.lm = DistilBertModel.from_pretrained('distilbert-base-cased')
-        self.img_embedder = ImageEmbedding(self.h_dim)
-        self.linear1 = nn.Linear(self.h_dim*4, self.h_dim*2)
-        self.linear2 = nn.Linear(self.h_dim*2, self.h_dim)
-        self.linear3 = nn.Linear(self.h_dim, 1)
-    
+        self.img_embedder = ImageEmbedding()
+        self.mlp = nn.Sequential(
+            nn.Linear(512*2+768, self.h_dim),
+            nn.ReLU(),
+            nn.Linear(self.h_dim, 2),
+            nn.Softmax()
+        )
+
     def forward(self, img1, img2, sents, sent_lens):
+        # [b, 512*2]
         img_features = self.img_embedder(img1, img2)
-        print(img_features.shape)
+        # [b, s, 768]
         lm_last_hidden_states = self.lm(sents)[0]
-        print(lm_last_hidden_states.shape)
-        tot_embedding = torch.cat([img_features, lm_last_hidden_states[:,0]], dim=1)
-        feature_layer1 = self.linear1(tot_embedding)
-        feature_layer1 = nn.functional.relu(feature_layer1)
-        feature_layer2 = self.linear2(feature_layer1)
-        feature_layer2 = nn.functional.relu(feature_layer2)
-        feature_layer3 = self.linear3(feature_layer2)
-        feature_layer3 = nn.functional.relu(feature_layer3)
-        feature_layer3 = torch.sigmoid(feature_layer3)
-        return feature_layer3
+        # [b, 512*2+768]
+        tot_embedding = torch.cat(
+            [img_features, lm_last_hidden_states[:, 0]], dim=-1)
+        # [b, 2]
+        return self.mlp(tot_embedding)
