@@ -2,3 +2,4 @@
 data/resized_images/*
 *.zip
 processed_data/*
+*.pyc
