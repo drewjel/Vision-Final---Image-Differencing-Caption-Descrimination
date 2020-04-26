@@ -18,7 +18,6 @@ class DiffEval(nn.Module):
             nn.Linear(4*self.h_dim, self.h_dim),
             nn.ReLU(),
             nn.Linear(self.h_dim, 2),
-            nn.Softmax()
         )
 
     def forward(self, img1, img2, sents, sent_lens):

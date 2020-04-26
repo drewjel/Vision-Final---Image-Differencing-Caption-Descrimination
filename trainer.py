@@ -22,8 +22,10 @@ if torch.cuda.is_available():
 
 
 def compute_loss_and_metrics(out, target):
-    pass
-
+    loss = torch.nn.functional.cross_entropy(out, target)
+    _, predicted = torch.max(out.data, -1)
+    acc = (predicted == target).sum().float() / target.size(0)
+    return loss, acc
 
 def train(model, train_data, val_data, bptt=16):
     lr = 0.003  # learning rate
@@ -33,18 +35,20 @@ def train(model, train_data, val_data, bptt=16):
     for epoch in range(num_epoch):
         logger.reset()
         model.train()  # Turn on the train mode
+        tot_loss = 0
         for batch, batch_data in enumerate(train_data):
-            img1, img2, sents, sent_lens = batch_data
+            img1, img2, sents, sent_lens, label = batch_data
             img1 = img1.to(device)
             img2 = img2.to(device)
             sents = sents.to(device)
+            label = label.to(device)
 
             out = model(img1, img2, sents, sent_lens)
-            print(out.shape)
-            exit()
-            loss, recall1, acc = compute_loss_and_metrics(out, sents, target)
-            logger.set_values(loss.item(), recall1.item(), acc.item())
-        logger.print_log()
+            loss, acc = compute_loss_and_metrics(out, label)
+            loss.backward()
+            optimizer.step()
+            logger.set_values(loss.item(), acc.item())
+            logger.print_log(batch, epoch, lr)
 
 
 if __name__ == "__main__":
@@ -56,7 +60,7 @@ if __name__ == "__main__":
                                      save_dir=save_dir,
                                      mode='test',
                                      )
-    bptt = 2
+    bptt = 32
     test_data = DataLoader(test_set, batch_size=bptt,
                            shuffle=True, collate_fn=pad_collate)
     model = DiffEval()

@@ -9,11 +9,14 @@ from __future__ import print_function, division
 import warnings
 import os
 import torch
-from PIL import Image
 import random
 import json
-from numpy import asarray
 import math
+
+import numpy as np
+from numpy import asarray
+
+from PIL import Image
 
 from torch.utils.data import Dataset, DataLoader
 from torch.nn.utils.rnn import pad_sequence
@@ -32,16 +35,18 @@ def img2tensor(img_dir, idx):
     im1 = asarray(im1)
     return im, im1
 
+
 def text2tensor(sentences, tokenizer):
     # SC: Currently, we concat all sentences into a long sentence for simplicity.
     return torch.tensor([tokenizer.encode(''.join(sentences), add_special_tokens=True)])
 
+
 def pad_collate(batch):
-    (img1s, img2s, sents) = zip(*batch)
+    (img1s, img2s, sents, label) = zip(*batch)
     sents = [sent.squeeze(0) for sent in sents]
     sent_lens = [len(x) for x in sents]
     sents = pad_sequence(sents, batch_first=True, padding_value=0)
-    return torch.stack(img1s), torch.stack(img2s), sents, sent_lens
+    return torch.stack(img1s), torch.stack(img2s), sents, sent_lens, torch.tensor(label)
 
 
 class Spot_and_diff_dataset(Dataset):
@@ -68,42 +73,33 @@ class Spot_and_diff_dataset(Dataset):
         Returns:
         tuple: (image, target) where target is index of the target class.
         """
-        img_0, img_1, text = self.data_label_tuples[index]['img_0'], self.data_label_tuples[
-            index]['img_1'], self.data_label_tuples[index]['sentences']
+        img_0, img_1, text, label = self.data_label_tuples[index]['img_0'], self.data_label_tuples[
+            index]['img_1'], self.data_label_tuples[index]['sentences'], self.data_label_tuples[index]['label']
 
         if self.transform:
             img_0 = self.transform(img_0)
             img_1 = self.transform(img_1)
-            text = text
 
-        return img_0, img_1, text
+        return img_0, img_1, text, label
 
     def __len__(self):
         return len(self.data_label_tuples)
 
-    def torch_bernoulli():
-      return (torch.rand(1)).float()
+    def torch_bernoulli(self):
+        return (torch.rand(1)).float()
 
-    def augment_sample_sentences(disturbance_bernoulli, sample):
-        disturbance_magnitude = disturbance_bernoulli - .5
-        disturbance_magnitude /= .5 * len(sample['sentences'])
+    def augment_sample_sentences(self, sample, n_replacement = 1):
 
-        num_to_replace = min(len(sample['sentences']), math.floor(disturbance_magnitude) + 1)
-        
-        s_count = len(sample['sentences'])
-        replace_order = np.random.permutation(s_count)
+        sents = sample['sentences']
+        n_sents = len(sents)
+        replace_order = np.random.permutation(n_sents)
 
-        new_sentences = []
-
-        for i in range(s_count):
-            if i < num_to_replace:
-                replace_sent = sample['sentences'][0]
-                while replace_sent in sample['sentences']:
-                    replace_sent = self.all_sentences[np.random.choice(len(self.all_sentences), 1)[0]]
-                new_sentences.append(replace_sent)
-            else:
-                new_sentences.append(sample['sentences'][replace_order[i]])
-        sample['sentences'] = new_sentences
+        for i in range(n_replacement):
+            sent_to_replace = sents[replace_order[i]]
+            while sent_to_replace in sents:
+                sent_to_replace = self.all_sentences[np.random.choice(
+                    len(self.all_sentences))]
+            sents[replace_order[i]] = sent_to_replace
 
         return sample
 
@@ -113,8 +109,9 @@ class Spot_and_diff_dataset(Dataset):
             print(self.mode, 'data exists, read from', saved_path)
         else:
             raw_dataset = []
-            dataset = []
-            tokenizer = DistilBertTokenizerFast.from_pretrained('distilbert-base-cased')
+            neg_dataset = []
+            tokenizer = DistilBertTokenizerFast.from_pretrained(
+                'distilbert-base-cased')
             with open(self.data_dir) as f:
                 data = json.load(f)
                 for i in range(len(data)):
@@ -124,35 +121,32 @@ class Spot_and_diff_dataset(Dataset):
 
                     img_0, img_1 = img2tensor(self.img_dir, idx)
                     sample = {'img_0': img_0, 'img_1': img_1,
-                              'sentences': sentences}
+                              'sentences': sentences, 'label': 1}
                     raw_dataset.append(sample)
                     if i % 100 == 99:
-                        print(i)
-                import numpy as np
+                        print(i, '/', len(data))
                 for i in range(len(data)):
-                    current_sample = raw_dataset[i]
+                    # Here, we do shallow copy to avoid dict-level in-place modification
+                    current_sample = {**raw_dataset[i]}
+                    current_sample['sentences'] = [] + current_sample['sentences']
+                    current_sample['label'] = 0
 
-                    disturbance = self.torch_bernoulli()
-
-                    should_add_noise = disturbance > .5
-
-                    if(should_add_noise):
-                        current_sample = augment_sample_sentences(disturbance, current_sample)
-
-                    img_0 = current_sample['img_0']
-                    img_1 = current_sample['img_1']
-                    sentences = current_sample['sentences']
-                    
-                    sample = {'img_0': img_0, 'img_1': img_1,
-                              'sentences': text2tensor(sentences, tokenizer), label: 0 if should_add_noise else 1,
-                              'noise_level': disturbance}
-                    dataset.append(sample)
+                    if self.torch_bernoulli() > .5:
+                        negative_sample = self.augment_sample_sentences(
+                            current_sample, n_replacement=1)
+                        neg_dataset.append(current_sample)
                     if i % 100 == 99:
-                        print(i)
+                        print(i, '/', len(data))
+            
+            new_dataset = raw_dataset + neg_dataset
+            for r in new_dataset:
+                r['sentences'] = text2tensor(r['sentences'], tokenizer)
 
             os.makedirs(self.spot_and_diff_dir, exist_ok=True)
-            torch.save(dataset, saved_path)
+            torch.save(new_dataset, saved_path)
             print('Saved to', saved_path)
+            print(len(raw_dataset), 'positive samples')
+            print(len(neg_dataset), 'negative samples')
 
 
 if __name__ == "__main__":
@@ -180,8 +174,8 @@ if __name__ == "__main__":
     #                                 )
 
     test_set = Spot_and_diff_dataset(csv_file=os.path.join(data_dir, 'test.json'),
-                                    img_dir=img_dir,
-                                    save_dir=save_dir,
-                                    transform=transforms.ToTensor(),
-                                    mode='test',
-                                    )
+                                     img_dir=img_dir,
+                                     save_dir=save_dir,
+                                     transform=transforms.ToTensor(),
+                                     mode='test',
+                                     )
