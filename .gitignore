@@ -1,1 +1,4 @@
-get_images.txt
+.vscode
+data/resized_images/*
+*.zip
+processed_data/*
