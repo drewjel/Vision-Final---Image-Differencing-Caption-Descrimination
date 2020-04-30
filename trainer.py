@@ -24,11 +24,14 @@ if torch.cuda.is_available():
 def compute_loss_and_metrics(out, target):
     loss = torch.nn.functional.cross_entropy(out, target)
     _, predicted = torch.max(out.data, -1)
+    #print('counts')
+    #print((predicted==target).sum().float())
+    #print(target.size(0))
     acc = (predicted == target).sum().float() / target.size(0)
     return loss, acc
 
 def train(model, train_data, val_data, bptt=16):
-    lr = 0.003  # learning rate
+    lr = 0.0000005  # learning rate
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     num_epoch = 100
     logger = Logger(len(train_data), log_interval=10)
@@ -37,7 +40,14 @@ def train(model, train_data, val_data, bptt=16):
         model.train()  # Turn on the train mode
         tot_loss = 0
         for batch, batch_data in enumerate(train_data):
+            if False and len(batch_data) != bptt:
+                print(len(batch_data))
+                print(bptt)
+                continue
             img1, img2, sents, sent_lens, label = batch_data
+            if True and img1.size()[0] != bptt:
+                continue
+
             img1 = img1.to(device)
             img2 = img2.to(device)
             sents = sents.to(device)

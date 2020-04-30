@@ -13,7 +13,7 @@ import torchvision.models as models
 class ImageEmbedding(nn.Module):
     def __init__(self):
         super(ImageEmbedding, self).__init__()
-        self.base_net = models.resnet18(pretrained=True)
+        self.base_net = models.resnet50(pretrained=True)
         model_list = list(self.base_net.children())[:-1]
         model_list += [nn.Flatten()]
         self.embed = nn.Sequential(*model_list)

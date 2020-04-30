@@ -15,20 +15,27 @@ class DiffEval(nn.Module):
             param.requires_grad = False
         self.img_embedder = ImageEmbedding()
         self.mlp = nn.Sequential(
-            nn.Linear(512*2+768, 4*self.h_dim),
+            nn.Linear(4864, 4*self.h_dim),
             nn.ReLU(),
             nn.Linear(4*self.h_dim, self.h_dim),
             nn.ReLU(),
             nn.Linear(self.h_dim, 2),
         )
 
+        self.bn = torch.nn.BatchNorm1d(4864, momentum=.999, affine=False)
+
     def forward(self, img1, img2, sents, sent_lens):
         # [b, 512*2]
         img_features = self.img_embedder(img1, img2)
+
+        
         # [b, s, 768]
         lm_last_hidden_states = self.lm(sents)[0]
-        # [b, 512*2+768]
+
         tot_embedding = torch.cat(
             [img_features, lm_last_hidden_states[:, 0]], dim=-1)
-        # [b, 2]
+        
+
+        tot_embedding = self.bn(tot_embedding)
+
         return self.mlp(tot_embedding)

@@ -129,11 +129,12 @@ class Spot_and_diff_dataset(Dataset):
                     # Here, we do shallow copy to avoid dict-level in-place modification
                     current_sample = {**raw_dataset[i]}
                     current_sample['sentences'] = [] + current_sample['sentences']
-                    current_sample['label'] = 0
+                    
 
                     if self.torch_bernoulli() > .5:
                         negative_sample = self.augment_sample_sentences(
                             current_sample, n_replacement=1)
+                        current_sample['label'] = 0
                         neg_dataset.append(current_sample)
                     if i % 100 == 99:
                         print(i, '/', len(data))
