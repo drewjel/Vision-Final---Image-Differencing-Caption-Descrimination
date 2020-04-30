@@ -31,7 +31,7 @@ def compute_loss_and_metrics(out, target):
     return loss, acc
 
 def train(model, train_data, val_data, bptt=16):
-    lr = 0.0000005  # learning rate
+    lr = 1e-4  # learning rate
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     num_epoch = 100
     logger = Logger(len(train_data), log_interval=10)
@@ -56,6 +56,7 @@ def train(model, train_data, val_data, bptt=16):
             out = model(img1, img2, sents, sent_lens)
             loss, acc = compute_loss_and_metrics(out, label)
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
             optimizer.step()
             logger.set_values(loss.item(), acc.item())
             logger.print_log(batch, epoch, lr)
@@ -70,7 +71,7 @@ if __name__ == "__main__":
                                      save_dir=save_dir,
                                      mode='test',
                                      )
-    bptt = 32
+    bptt = 16
     test_data = DataLoader(test_set, batch_size=bptt,
                            shuffle=True, collate_fn=pad_collate)
     model = DiffEval()

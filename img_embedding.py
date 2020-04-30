@@ -19,6 +19,9 @@ class ImageEmbedding(nn.Module):
         self.embed = nn.Sequential(*model_list)
 
     def forward(self, img_0, img_1):
+        self.base_net.eval()
+        for param in self.base_net.parameters():
+            param.requires_grad = False
 
         embed_0 = self.embed(img_0)
         embed_1 = self.embed(img_1)

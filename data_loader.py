@@ -131,7 +131,7 @@ class Spot_and_diff_dataset(Dataset):
                     current_sample['sentences'] = [] + current_sample['sentences']
                     
 
-                    if self.torch_bernoulli() > .5:
+                    if self.torch_bernoulli() >= .0:
                         negative_sample = self.augment_sample_sentences(
                             current_sample, n_replacement=1)
                         current_sample['label'] = 0
