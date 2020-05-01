@@ -40,13 +40,7 @@ def train(model, train_data, val_data, bptt=16):
         model.train()  # Turn on the train mode
         tot_loss = 0
         for batch, batch_data in enumerate(train_data):
-            if False and len(batch_data) != bptt:
-                print(len(batch_data))
-                print(bptt)
-                continue
             img1, img2, sents, sent_lens, label = batch_data
-            if True and img1.size()[0] != bptt:
-                continue
 
             img1 = img1.to(device)
             img2 = img2.to(device)
@@ -60,20 +54,47 @@ def train(model, train_data, val_data, bptt=16):
             optimizer.step()
             logger.set_values(loss.item(), acc.item())
             logger.print_log(batch, epoch, lr)
+        evaluate(model, val_data)
 
+def evaluate(eval_model, val_data, bptt=128):
+    eval_model.eval()  # Turn on the evaluation mode
+    logger = Logger(len(val_data), is_training=False)
+    logger.reset()
+    with torch.no_grad():
+        for batch, batch_data in enumerate(val_data):
+            img1, img2, sents, sent_lens, label = batch_data
+
+            img1 = img1.to(device)
+            img2 = img2.to(device)
+            sents = sents.to(device)
+            label = label.to(device)
+
+            out = model(img1, img2, sents, sent_lens)
+            loss, acc = compute_loss_and_metrics(out, label)
+            logger.set_values(loss.item(), acc.item())
+        logger.print_log()
 
 if __name__ == "__main__":
     save_dir = 'processed_data'
     data_dir = 'data/annotations'
     img_dir = 'data/resized_images'
+    bptt = 32
+
+    train_set = Spot_and_diff_dataset(csv_file=os.path.join(data_dir, 'train.json'),
+                                     img_dir=img_dir,
+                                     save_dir=save_dir,
+                                     mode='train',
+                                     )
+    train_data = DataLoader(train_set, batch_size=bptt,
+                           shuffle=True, collate_fn=pad_collate)
+
     test_set = Spot_and_diff_dataset(csv_file=os.path.join(data_dir, 'test.json'),
                                      img_dir=img_dir,
                                      save_dir=save_dir,
                                      mode='test',
                                      )
-    bptt = 16
     test_data = DataLoader(test_set, batch_size=bptt,
                            shuffle=True, collate_fn=pad_collate)
     model = DiffEval()
     model.to(device)
-    train(model, test_data, test_data, bptt=bptt)
+    train(model, train_data, test_data, bptt=bptt)
